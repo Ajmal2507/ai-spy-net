@@ -17,7 +17,7 @@ export const AIAnalysis = ({ data }: AIAnalysisProps) => {
 
   const handleAnalyze = async () => {
     if (!apiKey.trim()) {
-      toast.error("Please enter your OpenAI API key");
+      toast.error("Please enter your Groq API key");
       return;
     }
 
@@ -44,14 +44,14 @@ Provide a comprehensive analysis including:
 
 Format your response in markdown with clear sections using ## and ### headers.`;
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'llama-3.3-70b-versatile',
           messages: [
             { 
               role: 'system', 
@@ -113,12 +113,12 @@ Format your response in markdown with clear sections using ## and ### headers.`;
           <div className="space-y-2">
             <Label htmlFor="api-key" className="flex items-center gap-2">
               <Key className="w-4 h-4" />
-              OpenAI API Key
+              Groq API Key
             </Label>
             <Input
               id="api-key"
               type="password"
-              placeholder="sk-..."
+              placeholder="gsk_..."
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="bg-background"
@@ -126,12 +126,12 @@ Format your response in markdown with clear sections using ## and ### headers.`;
             <p className="text-xs text-muted-foreground">
               Your API key is only used locally and never stored. Get one at{" "}
               <a 
-                href="https://platform.openai.com/api-keys" 
+                href="https://console.groq.com/keys" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
               >
-                platform.openai.com
+                console.groq.com
               </a>
             </p>
           </div>
@@ -139,7 +139,7 @@ Format your response in markdown with clear sections using ## and ### headers.`;
           <div className="text-center py-8 space-y-4">
             <AlertCircle className="w-16 h-16 text-muted-foreground mx-auto opacity-50" />
             <p className="text-muted-foreground">
-              Enter your OpenAI API key above and click "Generate Analysis" to get AI-powered threat intelligence insights
+              Enter your Groq API key above and click "Generate Analysis" to get AI-powered threat intelligence insights
             </p>
           </div>
         </div>
