@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Brain, Sparkles, TrendingUp, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Brain, Sparkles, TrendingUp, AlertCircle, Key } from "lucide-react";
 import { toast } from "sonner";
 
 interface AIAnalysisProps {
@@ -11,50 +13,73 @@ interface AIAnalysisProps {
 export const AIAnalysis = ({ data }: AIAnalysisProps) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState("");
 
   const handleAnalyze = async () => {
+    if (!apiKey.trim()) {
+      toast.error("Please enter your OpenAI API key");
+      return;
+    }
+
+    if (!data) {
+      toast.error("No log data available to analyze");
+      return;
+    }
+
     setAnalyzing(true);
     
-    // Simulate AI analysis
-    setTimeout(() => {
-      const mockAnalysis = `
-## Threat Intelligence Summary
+    try {
+      const prompt = `Analyze this SSH honeypot data and provide detailed threat intelligence:
 
-### Attack Pattern Analysis
-Based on the captured honeypot data, we've identified **3 major attack patterns**:
+Total Attacks: ${data.totalAttacks}
+Unique IPs: ${data.uniqueIPs}
+Top Countries: ${JSON.stringify(data.topCountries)}
+Top Commands: ${JSON.stringify(data.topCommands)}
 
-1. **Credential Stuffing Campaign** (High Severity)
-   - 437 attempts from Chinese IP ranges
-   - Common username/password combinations detected
-   - Recommendation: Implement rate limiting and IP blocking
+Provide a comprehensive analysis including:
+1. Attack Pattern Analysis - identify major attack patterns with severity levels
+2. Command Analysis - analyze the malicious commands and their intent
+3. Threat Actor Profiling - profile potential threat actors based on behavior
+4. Security Recommendations - provide 5-7 specific, actionable recommendations
 
-2. **Malware Distribution Attempts** (Critical)
-   - 156 wget/curl commands attempting to download malicious scripts
-   - Primary targets: /tmp and /var directories
-   - Recommendation: Enhanced file system monitoring
+Format your response in markdown with clear sections using ## and ### headers.`;
 
-3. **Reconnaissance Activity** (Medium Severity)
-   - High volume of ls, cat, and find commands
-   - Attackers mapping system architecture
-   - Recommendation: Deploy honeytokens in sensitive directories
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are a cybersecurity expert specializing in threat intelligence and honeypot analysis. Provide detailed, actionable insights.' 
+            },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000,
+        }),
+      });
 
-### Threat Actor Profiling
-- **Primary threat actors**: APT groups from APAC region
-- **Attack timing**: Peak activity between 02:00-06:00 UTC
-- **Sophistication level**: Medium (automated tools with some manual intervention)
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'Failed to generate analysis');
+      }
 
-### Security Recommendations
-1. Update firewall rules to block identified malicious IP ranges
-2. Implement behavioral analysis for SSH sessions
-3. Deploy additional honeypots in DMZ
-4. Enhanced logging for lateral movement detection
-5. Consider implementing MFA for all remote access
-      `;
+      const result = await response.json();
+      const generatedAnalysis = result.choices[0].message.content;
       
-      setAnalysis(mockAnalysis);
-      setAnalyzing(false);
+      setAnalysis(generatedAnalysis);
       toast.success("AI analysis complete!");
-    }, 3000);
+    } catch (error) {
+      console.error('AI analysis error:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate analysis");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   return (
@@ -66,7 +91,7 @@ Based on the captured honeypot data, we've identified **3 major attack patterns*
         </div>
         <Button
           onClick={handleAnalyze}
-          disabled={analyzing}
+          disabled={analyzing || !apiKey.trim()}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           {analyzing ? (
@@ -84,11 +109,39 @@ Based on the captured honeypot data, we've identified **3 major attack patterns*
       </div>
 
       {!analysis && !analyzing && (
-        <div className="text-center py-12 space-y-4">
-          <AlertCircle className="w-16 h-16 text-muted-foreground mx-auto opacity-50" />
-          <p className="text-muted-foreground">
-            Click "Generate Analysis" to get AI-powered threat intelligence insights
-          </p>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="api-key" className="flex items-center gap-2">
+              <Key className="w-4 h-4" />
+              OpenAI API Key
+            </Label>
+            <Input
+              id="api-key"
+              type="password"
+              placeholder="sk-..."
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="bg-background"
+            />
+            <p className="text-xs text-muted-foreground">
+              Your API key is only used locally and never stored. Get one at{" "}
+              <a 
+                href="https://platform.openai.com/api-keys" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                platform.openai.com
+              </a>
+            </p>
+          </div>
+          
+          <div className="text-center py-8 space-y-4">
+            <AlertCircle className="w-16 h-16 text-muted-foreground mx-auto opacity-50" />
+            <p className="text-muted-foreground">
+              Enter your OpenAI API key above and click "Generate Analysis" to get AI-powered threat intelligence insights
+            </p>
+          </div>
         </div>
       )}
 
