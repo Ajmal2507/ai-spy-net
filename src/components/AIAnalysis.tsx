@@ -17,7 +17,7 @@ export const AIAnalysis = ({ data }: AIAnalysisProps) => {
 
   const handleAnalyze = async () => {
     if (!apiKey.trim()) {
-      toast.error("Please enter your Groq API key");
+      toast.error("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");
       return;
     }
 
